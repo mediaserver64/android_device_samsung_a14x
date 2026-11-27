@@ -1,0 +1,92 @@
+diff --git a/partitionmanager.cpp b/partitionmanager.cpp
+index 9e4af56..2e531b1 100755
+--- a/partitionmanager.cpp
++++ b/partitionmanager.cpp
+@@ -4811,7 +4811,7 @@ void TWPartitionManager::Unlock_Block_Partitions() {
+ 	}
+ }
+ 
+-bool TWPartitionManager::Unmap_Super_Devices() {
++bool TWPartitionManager::Unmap_Super_Devices(bool remove_partition_entries) {
+ 	bool destroyed = false;
+ #ifndef TW_EXCLUDE_APEX
+ 	twrpApex apex;
+@@ -4836,8 +4836,12 @@ bool TWPartitionManager::Unmap_Super_Devices() {
+ 				LOGINFO("removing cow partition: %s\n", cow_partition.c_str());
+ 				destroyed = DestroyLogicalPartition(cow_partition);
+ 			}
+-			iter = Partitions.erase(iter);
+-			delete part;
++			if (remove_partition_entries) {
++				iter = Partitions.erase(iter);
++				delete part;
++			} else {
++				++iter;
++			}
+ 			if (!destroyed) {
+ 				return false;
+ 			}
+diff --git a/partitions.hpp b/partitions.hpp
+index ea1f80b..8f053b9 100644
+--- a/partitions.hpp
++++ b/partitions.hpp
+@@ -442,7 +442,7 @@ public:
+ 	void Set_Crypto_State();                                                  // Sets encryption state for devices (ro.crypto.state)
+ 	int Set_Crypto_Type(const char* crypto_type);                             // Sets encryption type for FDE (block) and FBE (file) devices (ro.crypto.type)
+ 	void Unlock_Block_Partitions();                                           // Unlock all block devices after update_engine runs
+-	bool Unmap_Super_Devices();                                               // Unmap super devices in TWRP
++	bool Unmap_Super_Devices(bool remove_partition_entries = true);           // Unmap super devices in TWRP
+ 	bool Check_Pending_Merges();                                              // Check and run pending merges on data for VAB devices
+ 	bool Disable_AVB2(bool Display_Info);                                     // Disable AVB2.0 in vbmeta/vbmeta_system
+ 	void Check_UsbOtg_Status();						  // Checks if usb_otg is connected
+diff --git a/twrpinstall/twinstall.cpp b/twrpinstall/twinstall.cpp
+index e621ca1..1018ba4 100755
+--- a/twrpinstall/twinstall.cpp
++++ b/twrpinstall/twinstall.cpp
+@@ -282,6 +282,7 @@ static int Run_Update_Binary(const char *path, int* wipe_cache, zip_type ztype)
+ int TWinstall_zip(const char *path, int *wipe_cache, bool check_for_digest)
+ {
+   int ret_val, zip_verify = 1, unmount_system = 1, reflashtwrp = 0, unmount_vendor = 1;
++  bool remap_super_devices = false;
+   bool run_rom_scripts = false;
+ 
+   if (strcmp(path, "error") == 0)
+@@ -398,12 +399,26 @@ int TWinstall_zip(const char *path, int *wipe_cache, bool check_for_digest)
+   ZipEntry64 update_binary_entry;
+   if (FindEntry(Zip, update_binary_name, &update_binary_entry) == 0) {
+ 		LOGINFO("Update binary zip\n");
++		ZipEntry64 dynamic_partitions_entry;
++		bool has_dynamic_partitions_ota =
++			FindEntry(Zip, "dynamic_partitions_op_list", &dynamic_partitions_entry) == 0;
+ 		// Additionally verify the compatibility of the package.
+ 		if (!Fox_Skip_Treble_Compatibility_Check() && !verify_package_compatibility(Zip)) {
+ 			gui_err("zip_compatible_err=Zip Treble compatibility error!");
+ 			ret_val = INSTALL_CORRUPT;
+ 		} else {
+-			ret_val = Prepare_Update_Binary(path, Zip);
++			ret_val = INSTALL_SUCCESS;
++			if (has_dynamic_partitions_ota) {
++				gui_msg("prepare_dynamic_partitions=Preparing dynamic partitions for block OTA...");
++				remap_super_devices = true;
++				if (!PartitionManager.Unmap_Super_Devices(false)) {
++					gui_err("prepare_dynamic_partitions_err=Failed preparing dynamic partitions");
++					ret_val = INSTALL_ERROR;
++				}
++			}
++			if (ret_val == INSTALL_SUCCESS) {
++				ret_val = Prepare_Update_Binary(path, Zip);
++			}
+ 			if (ret_val == INSTALL_SUCCESS) {
+ 				usleep(32);
+ 				run_rom_scripts = ((DataManager::GetIntValue(FOX_ZIP_INSTALLER_CODE) != 0) // only run after flashing a ROM
+@@ -473,6 +488,10 @@ int TWinstall_zip(const char *path, int *wipe_cache, bool check_for_digest)
+ 		}
+    }
+ 
++  if (remap_super_devices) {
++    PartitionManager.Prepare_All_Super_Volumes();
++  }
++
+   time(&stop);
+   int total_time = (int) difftime(stop, start);
+ 
