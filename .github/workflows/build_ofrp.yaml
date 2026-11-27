@@ -63,7 +63,7 @@ jobs:
 
       - name: Cloning Trees
         run: |
-          git clone --branch a14x-fox https://github.com/mediaserver64/android_device_samsung_a54x.git device/samsung/a14x
+          git clone --branch fox-12.1 https://github.com/mediaserver64/android_device_samsung_a14x.git device/samsung/a14x
         working-directory: ./fox-12.1
 
       - name: Apply recovery patch
@@ -86,7 +86,7 @@ jobs:
         id: release
         uses: softprops/action-gh-release@v2
         with:
-          files: /home/runner/work/android_device_samsung_a54x/android_device_samsung_a54x/fox-12.1/out/target/product/a14x/recovery.img
+          files: /home/runner/work/android_device_samsung_a14x/android_device_samsung_a14x/fox-12.1/out/target/product/a14x/recovery.img
           name: OrangeFox 12.1
           tag_name: "${{ env.DATE }}"
           body: |
