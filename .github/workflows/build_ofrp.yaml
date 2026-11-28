@@ -82,11 +82,19 @@ jobs:
           lunch twrp_a14x-eng && make clean && mka recoveryimage
         working-directory: ./fox-12.1
 
+      - name: Create Odin tar
+        run: |
+          cd out/target/product/a14x
+          tar -H ustar -c recovery.img -f recovery.tar
+        working-directory: ./fox-12.1
+
       - name: Publish to GitHub
         id: release
         uses: softprops/action-gh-release@v2
         with:
-          files: /home/runner/work/android_device_samsung_a14x/android_device_samsung_a14x/fox-12.1/out/target/product/a14x/recovery.img
+          files: |
+            ${{ github.workspace }}/fox-12.1/out/target/product/a14x/recovery.img
+            ${{ github.workspace }}/fox-12.1/out/target/product/a14x/recovery.tar
           name: OrangeFox 12.1
           tag_name: "${{ env.DATE }}"
           body: |
